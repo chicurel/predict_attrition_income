@@ -1,0 +1,958 @@
+---
+title: "Predict Attrition and Monthly Income"
+author: "Edgar Chicurel"
+date: "2023-03-18"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}    
+knitr::opts_chunk$set(echo = T, warning=FALSE, message=FALSE)
+```
+
+
+## Introduction
+
+The employee attrition rate is an important factor for companies to monitor and manage, as high attrition can lead to significant financial losses and organizational disruption. To better understand the factors that contribute to employee attrition, IBM data scientists have created a fictional dataset that includes various employee attributes such as age, education, job role, monthly income, job satisfaction, and others. This dataset provides an opportunity for machine learning practitioners to develop models that can predict whether an employee is likely to leave the company (binary classification) and estimate their monthly income (regression).
+
+In this project, I plan to develop two separate models to predict attrition and monthly income. I will explore various techniques such as logistic regression, decision trees, random forests, and gradient boosting and evaluate the models' performance using appropriate metrics. My goal is to provide insights into the factors that are most strongly associated with employee attrition and to estimate the typical salary levels of employees based on their individual characteristics and see if they are over or under payed.
+
+
+### Dataset
+
+The dataset used in this project is a fictional dataset created by IBM data scientists. It contains 35 features that provide information about the employees, such as age, gender, education, job role, monthly income, job satisfaction, and performance rating, among others. This dataset is useful for exploring the factors that contribute to employee behavior. The dataset also allows us to explore important questions, such as attrition rates and of monthly incomes based on different categorie such as education, working years, etc.
+
+Find dataset source here:
+
+[IBM HR Analytics Employee Attrition & Performance](https://www.kaggle.com/datasets/pavansubhasht/ibm-hr-analytics-attrition-dataset/versions/1?resource=download)
+
+
+#### Loading Libraries 
+
+```{r}
+library(tidyverse)
+library(patchwork)
+library(ggplot2)
+library(caret)
+library(ggcorrplot)
+library(ggeffects)
+library(MASS)
+library(pROC)
+library(rpart)
+library(rpart.plot)
+library(pdp)
+
+set.seed(9438)
+```
+
+
+#### Reading the data
+
+```{r}
+setwd("C:/Users/usuario/Desktop/Master/Advanced Modelling/Final_project/")
+HR = read_csv("Database/WA_Fn-UseC_-HR-Employee-Attrition.csv")
+
+```
+
+
+#### Variables:
+
+1. **AGE:**	Age of Employee
+2. **ATTRITION:**	Employee leaving the company (0=no, 1=yes)
+3. **BUSINESS TRAVEL:**	(1=No Travel, 2=Travel Frequently, 3=Travel Rarely)
+4. **DAILY RATE:**	Salary Level
+5. **DEPARTMENT:**	(1=HR, 2=R&D, 3=Sales)
+6. **DISTANCEFROMHOME:**	Distance from home to work in km
+7. **EDUCATION:** (1=Below College, 2=College, 3=Bachelor, 4=Master, 5=Doctor)
+8. **EDUCATION FIELD:**	(1=HR, 2=Life Sciences, 3=Marketing, 4=Medical Sciences, 5=Others, 6= Technical)
+9. **EMPLOYEE COUNT:** Employee count	
+10. **EMPLOYEE NUMBER:** Employee ID
+11. **ENVIROMENT SATISFACTION:** Satisfaction with the environment (1=lowest, 4=highest)
+12. **GENDER:**	(1=Female, 2=Male)
+13. **HOURLY RATE:** Hourly salary
+14. **JOB INVOLVEMENT:**	Job Involvement (1=lowest, 4=highest)
+15. **JOB LEVEL:**	 Level of job (1=lowest, 4=highest)
+16. **JOB ROLE:**	(1=HC REP, 2=HR, 3=Lab Technician, 4=Manager, 5= Managing Director, 6= Research Director, 7= Research Scientist, 8=Sales Executive, 9= Sales Representative)
+17. **JOB SATISFACTION:**	 Satisfaction with the job (1=lowest, 4=highest)
+18. **MARITAL STATUS:**	(1=Divorced, 2=Married, 3=Single)
+19. **MONTHLY INCOME:** Monthly Salary
+20. **MONTHY RATE**	 Monthly Salary
+21. **NUMCOMPANIESWORKED:**	No. of companies worked at
+22. **OVER 18:**	(1=yes, 2=no)
+23. **OVERTIME:**	(1=no, 2=yes)
+24. **PERCENT SALARY HIKE**	 % increase in salary between last 2 years.
+25. **PERFORMANCE RATING:**	Performance rating (1=lowest, 4=highest)
+26. **RELATIONS SATISFACTION:**	Relations satisfaction (1=lowest, 4=highest)
+27. **STANDARD HOURS:**	Standard hours worked
+28. **STOCK OPTIONS LEVEL:**	How much company stocks you own from this company
+29. **TOTAL WORKING YEARS:**	Total years worked
+30. **TRAINING TIMES LAST YEAR:**	Hours spent training last year
+31. **WORK LIFE BALANCE:** Time spent between work and outside
+32. **YEARS AT COMPANY:**	Total number of years at the company
+33. **YEARS IN CURRENT ROLE:** Years in current role
+34. **YEARS SINCE LAST PROMOTION:**	Years since last promotion
+35. **YEARS WITH CURRENT MANAGER:**	Years spent with current manager
+
+
+
+#### Feature Engineer & Descriptive
+
+To prepare the dataset for the analysis, I conducted feature engineering by dropping non-relevant variables that are unlikely to influence the employee attrition rate and monthly income, I also removed those who had only 1 value and those who I didn't know the meaning of them and were not correlated with the dependent variables. There were non missing values (NAs). I also converted character variables to factors so the model can understand that it is a category. This process ensured that the data set was ready for analysis and could be used to develop accurate and robust models.
+
+
+```{r}
+
+HR = HR %>%
+  mutate(
+    HourlyRate = NULL,
+    DailyRate = NULL,
+    MonthlyRate = NULL,
+    Over18 = NULL,
+    StandardHours =NULL,
+    EmployeeCount = NULL,
+    EmployeeNumber = NULL,
+    Education = as.factor(Education),
+    EnvironmentSatisfaction = as.factor(EnvironmentSatisfaction),
+    JobInvolvement = as.factor(JobInvolvement),
+    JobSatisfaction = as.factor(JobSatisfaction),
+    PerformanceRating = as.factor(PerformanceRating),
+    RelationshipSatisfaction = as.factor(RelationshipSatisfaction),
+    WorkLifeBalance = as.factor(WorkLifeBalance),
+    Attrition = as.factor(Attrition),
+    BusinessTravel = as.factor(BusinessTravel),
+    Department = as.factor(Department),
+    EducationField = as.factor(EducationField),
+    Gender = as.factor(Gender),
+    JobRole = as.factor(JobRole),
+    MaritalStatus = as.factor(MaritalStatus),
+    OverTime = as.factor(OverTime),
+    JobLevel = as.factor(JobLevel)
+  )
+
+```
+
+
+This next part of the code conducts a basci descriptive analysis of the HR dataset by taking the average of key variables. Specifically, the mean values of PercentSalaryHike, Age, MonthlyIncome, and YearsAtCompany. This information can be used to gain insights into the central tendencies of these variables.
+
+
+```{r}
+Descriptive = HR %>%
+  summarize(PercentSalaryHike = mean(PercentSalaryHike),
+            Age = mean(Age),
+            MonthlyIncome = mean(MonthlyIncome),
+            YearsAtCompany = mean(YearsAtCompany))
+
+Descriptive
+```
+
+
+#### Plots
+This next section generates various density plots and histograms to visualize the distribution of different variables in the HR dataset.
+
+The first four plots are density plots for PercentSalaryHike, MonthlyIncome, YearsAtCompany, and Age respectively. Each plot shows the distribution of the corresponding variable and the fill color represents the density.
+
+The fifth plot is a histogram of Attrition, which shows the count of employees who left the company (Attrition=Yes) and those who stayed (Attrition=No).
+
+The sixth plot is a histogram of JobSatisfaction, which shows the count of employees at different levels of job satisfaction.
+
+
+```{r}
+
+
+t2 = ggplot(HR, aes(x=PercentSalaryHike)) + geom_density(fill = "darkred")
+t3 = ggplot(HR, aes(x=MonthlyIncome)) + geom_density(fill = "green")
+t4 = ggplot(HR, aes(x=YearsAtCompany)) + geom_density(fill = "purple")
+t5 = ggplot(HR, aes(x=Age)) + geom_density(fill = "orange")
+t6 = ggplot(HR, aes(x = Attrition)) +
+  geom_histogram(binwidth = 5, color = "black", fill = "light blue", stat = "count")
+t7 = ggplot(HR, aes(x = JobSatisfaction)) +
+  geom_histogram(binwidth = 5, color = "black", fill = "brown", stat = "count")
+  
+t2 + t3 + t4 + t5 + t6 +t7
+
+
+```
+
+
+The distribution of most continuous variables appears to be right-skewed, while Age has a roughly normal distribution between 20 and 60 years. It seems that the majority of employees have not left the company, which could be a positive indicator for the organization. There are numerous instances of lower Job Satisfaction ratings (1 or 2), which may raise concerns about employee retention and job satisfaction within the company.
+
+
+
+#### Correlations:
+In this section, we are exploring the correlation between numeric variables in our HR dataset focusing more in interpreting Monthly Income.
+
+
+```{r}
+HR_numeric = HR %>% 
+  dplyr::select(where(is.numeric))
+
+
+
+corrdata <- cor(HR_numeric)
+ggcorrplot(corrdata, title = "Correlation matrix fo data", lab=TRUE)
+```
+
+
+The correlation analysis indicates that Monthly Income is significantly correlated with most of the numeric variables, which is a valuable finding for our analysis. Notably, Monthly Income shows a strong positive correlation with Age, Working Years, and Years at Company, which is to be expected given that these variables are likely to impact an employee's income.
+
+
+### Data splitting
+In this part of the code, the dataset is being split into two parts, one for training the model and the other for testing it. The split is done in a 70-30 ratio, where 70% of the data is used for training the model, and 30% is used for testing its performance.
+
+
+```{r}
+
+in_train <- createDataPartition(HR$Attrition, p = 0.70, list = FALSE)  
+training <- HR[ in_train,]
+testing <- HR[-in_train,]
+nrow(training)
+nrow(testing)
+
+```
+
+
+## Classification
+
+The classification section aims to predict the variable of Attrition, which represents whether an employee left the company or not. It is important to note that the data is imbalanced, with a majority of "no" cases (i.e., employees who did not leave the company) and only a few "yes" cases (i.e., employees who left the company). 
+
+Imbalanced plot:
+
+
+```{r}
+
+HR %>% 
+ggplot(aes(x = Attrition)) +
+  geom_bar(aes(fill= Attrition)) +
+  labs(x="Attrition", y = "", title = "Distribution of Attrition in the Sample") +
+  scale_x_discrete(labels = c("Stayed", "Left")) +
+  guides(fill = FALSE) +
+  theme_light()
+
+```
+
+
+### Logistic regression
+
+Because we are dealing with binary classification, we can use the standard glm function in R for the logit model and use the AUC to evaluate model.
+
+First, model with all variables:
+
+
+```{r}
+
+logit.model = glm(Attrition ~ ., family = binomial(link = "logit"), data = training)
+summary(logit.model)
+
+
+```
+
+
+
+#### Interpretation
+
+This logistic regression model suggests that Monthly Income is not a relevant predictor of Attrition, whereas variables related to working environment, such as Distance from Home, Business Travel, Job Involvement, and Job Satisfaction, seem to be relevant. Variables related to positions or salary do not appear to be as relevant.
+
+However, it is important to note that the model may be over-fitted, which means that it may be too complex and may not generalize well to new data. To address this issue, it may be necessary to remove non-relevant variables and build a new model.
+
+Now, going to try only significant variables and build a new model:
+
+
+```{r}
+logit.model = glm(Attrition ~ BusinessTravel + JobSatisfaction + MaritalStatus +  NumCompaniesWorked + OverTime + RelationshipSatisfaction + TotalWorkingYears + TrainingTimesLastYear + WorkLifeBalance + YearsSinceLastPromotion + YearsWithCurrManager, family = binomial(link = "logit"), data = training)
+
+summary(logit.model)
+```
+
+
+Based on the new model with 10 relevant variables, it appears that the higher job satisfaction, work-life balance, and relationship with coworkers the higher the negative impact they have on the likelihood of attrition, while more business travel has a positive impact. It is important to note that although this model may be an improvement over the previous model, there may still be biases present and caution should be taken when interpreting the results.
+
+Plots to better see relationship
+
+
+```{r}
+gg.pred = ggpredict(logit.model, terms = c("TotalWorkingYears", "NumCompaniesWorked", "WorkLifeBalance"))
+plot(gg.pred, ci=F)
+```
+
+
+In these first plots it can be seen that the higher of companies worked on the higher the probability of attrition, having a non-balanced work life also increases the probability of attrition and finally the more Working Years the lower the probability.
+
+
+```{r}
+gg.pred = ggpredict(logit.model, terms = c("YearsSinceLastPromotion", "YearsWithCurrManager", "RelationshipSatisfaction"))
+plot(gg.pred, ci=F)  
+
+```
+
+
+In these plots it can be seen that the higher of Years with current manager, the lower the probability of attrition, having a low Relationship Satisfaction also increases the probability of attrition and finally the more Years since last promotion, the higher the probability.
+
+
+
+#### Predictions
+
+The previous part focused on interpreting the coefficients of the logistic regression model and making sense of them. In the next part, the focus shifts to predictions. I will first start with a logistic regression and explain all the steps involved and then prioritize prediction performance by evaluating the area under the curve (AUC) rather than focusing on interpretation. This involves building multiple models and comparing their prediction power.
+
+Prediction, using the Confusion Matrix with default 50% Bayes Rule:
+
+
+```{r}
+probability <- predict(logit.model, newdata=testing, type='response')
+prediction <- as.factor(ifelse(probability > 0.5, yes = "Yes", no = "No"))
+
+confusionMatrix(prediction, testing$Attrition)
+
+```
+
+
+The confusion matrix shows the performance of the model in terms of predicting the actual outcome versus the predicted outcome. In this case, there are two possible outcomes: "Yes" for employees who left the company and "No" for those who stayed.
+
+The confusion matrix is a table with four values: true positives (TP), true negatives (TN), false positives (FP), and false negatives (FN).
+
+In this confusion matrix, there are 360 true negatives (employees who stayed and were correctly predicted to stay), 19 true positives (employees who left and were correctly predicted to leave), 52 false negatives (employees who left but were predicted to stay), and 9 false positives (employees who stayed but were predicted to leave).
+
+The statistics derived from the confusion matrix are used to evaluate the performance of the model but going to focus in AUC which is a measure using  Sensitivity & Specificity.
+
+
+```{r}
+roc.logit=roc(testing$Attrition ~ probability)
+
+plot.roc(testing$Attrition, probability, col="darkblue", print.auc = TRUE,  auc.polygon=TRUE, grid=c(0.1, 0.2),
+         grid.col=c("green", "red"), max.auc.polygon=TRUE,
+         auc.polygon.col="lightblue", print.thres=TRUE)
+
+```
+
+
+The model has a AUC higher than 0.8 so it can already be considered a fair model. The best threshold with most balanced Specificity and Sensitivity measures is of 16.5% and in the next part going to look at this confusion matrix: 
+
+
+```{r}
+prediction <- as.factor(ifelse(probability > 0.165, yes = "Yes", no = "No"))
+
+confusionMatrix(prediction, testing$Attrition)
+```
+
+
+Now, more balanced results and predciting better the individuals who are leaving the company. 
+
+To improve the quality of our predictions, we need to address the issue of overfitting by using regularization techniques. One approach is to use 5-fold cross-validation, which allows us to evaluate the performance of the model on different subsets of the data and helps to prevent overfitting. Additionally, we can automate the process of tuning the hyperparameters of the model to optimize its performance.
+
+
+### Cross-validation
+
+In this next part, I will use the caret package to set up the cross-validation function for all models. The number of folds is set to 5, although a higher number of folds can lead to better performance, it is more computationally expensive. I will also specify the binary dependent variable and the method to be "repeated cross-validation".
+
+
+```{r}
+ctrl <- trainControl(method = "repeatedcv",     
+                     number = 5,               
+                     classProbs = T,             
+                     summaryFunction=twoClassSummary,
+                     verboseIter = F) 
+```
+
+
+Note that for each model have to define a grid for the hyper-parameters to make them work better.
+
+
+### Regularized Linear Discriminant Analysis
+
+From now on, we will focus on ROC and AUC as evaluation metrics for our predictive models. We will be using regularized linear discriminant analysis (rda) as our modeling technique. The reason we chose rda is that it is suitable for our binary classification problem with potential multicollinearity among predictor variables. Regularization will help prevent overfitting and improve model generalization performance.
+
+ 
+```{r}
+param_grid = expand.grid(gamma = seq(0, 1, 0.1), lambda = seq(0.1, 0.9, 0.1))
+
+
+ldaFit <- train(Attrition ~ .,               
+                method ="rda",          
+                data = training,
+                tuneGrid = param_grid,  
+                preProcess = c("center", "scale"),
+                metric="ROC",
+                trControl = ctrl)
+
+plot(ldaFit)
+
+```
+
+
+It can be seen that by setting the hyperparameter lambda to 0.9 it achieves the highest, now going to get the exact value and the Confusion Matrix:
+
+```{r}
+ldaPred = predict(ldaFit, testing, type = "prob")
+prediction <- as.factor(ifelse(ldaPred[,2] > 0.5, "Yes", "No"))
+confusionMatrix(prediction, testing$Attrition)
+auc <- roc(testing$Attrition, ldaPred[, 2])$auc
+auc
+
+```
+
+
+The area under the curve (AUC) is 0.8484, which is a measure of the model's overall predictive power, a little higher than Logsitic but there is still room for improvement.
+
+
+### Machine Learning
+
+In order to improve our prediction accuracy, we will explore the use of machine learning algorithms. Specifically, we will test four different models: K-nearest neighbors (KNN), decision tree, random forest, and gradient boosting.
+
+
+### Knn
+
+KNN is a simple and intuitive algorithm that works by identifying the k-nearest data points in the training set to a given test point, and predicting the class of the test point based on the most common class of its neighbors.
+
+
+```{r}
+knnFit <- train(Attrition ~ ., 
+                  data = training,
+                  method = "kknn",   
+                  preProc=c('scale','center'),
+                  tuneGrid = data.frame(kmax=c(17,19,21,23,25,27),distance=2,kernel='optimal'),  
+                  trControl = ctrl)
+
+
+plot(knnFit) 
+
+```
+
+
+```{r}
+
+knnProb = predict(knnFit, testing, type="prob")
+prediction <- as.factor(ifelse(knnProb[,2] > 0.1, "Yes", "No"))
+
+confusionMatrix(prediction, testing$Attrition)$table
+confusionMatrix(prediction, testing$Attrition)$overall[1:2]
+auc <- roc(testing$Attrition, knnProb[, 2])$auc
+auc
+
+```
+
+
+Based on the results, it appears that the KNN model performs moderately well with an AUC of 0.7709. However, it is important to note that the optimal number of maximum neighbors is around 24, which is not necessarily the best model for this data. It is predicting almost all of the Yes correctly but also a lot Yes when it is a true No.
+
+
+### Decision tree
+
+Decision trees are a popular method for classification tasks, and work by splitting the data based on the values of different features, and recursively partitioning the data until each subset is as homogeneous as possible in terms of the target variable. Going to do the next steps for interpretation because probably not the best predictive power from only one tree. 
+
+
+```{r}
+control = rpart.control(minsplit = 30, maxdepth = 10, cp=0.01)
+model = Attrition ~.
+dtFit <- rpart(model, data=training, method = "class", control = control)
+
+rpart.plot(dtFit, digits=3)
+```
+
+
+Interpreting this decision tree, it can be seen that it first starts with the variable "Over Time" and separates into two categories, then by "Monthly Income" and "Total Working Years", and so on.
+
+```{r}
+
+dtPred <- predict(dtFit, testing, type = "class")
+
+dtProb <- predict(dtFit, testing, type = "prob")
+
+prediction <- as.factor(ifelse(dtProb[,2] > 0.1, "Yes", "No"))
+
+confusionMatrix(prediction, testing$Attrition)$table
+confusionMatrix(prediction, testing$Attrition)$overall[1:2]
+
+auc <- roc(testing$Attrition, dtProb[, 2])$auc
+auc
+
+```
+
+
+The AUC of 0.746 suggests that the model is not very effective at distinguishing between positive and negative cases but expected from only one decision tree. In the next part a combination of many trees is done with some conditions and the model is called Random Forest
+
+
+### Random Forest
+
+Random forest is method that constructs many decision trees using different subsets of the data and features, and then aggregates their predictions to make a final classification.
+
+
+```{r}
+rfFit <- train(Attrition ~ ., 
+                  data = training,
+                  method = "rf",   
+                  preProc=c('scale','center'),
+                  tuneLength = 10,     
+                  trControl = ctrl)
+plot(rfFit)    
+
+
+```
+
+
+```{r}
+
+rfProb = predict(rfFit, testing, type="prob")
+prediction <- as.factor(ifelse(rfProb[,2] > 0.2, "Yes", "No"))
+
+confusionMatrix(prediction, testing$Attrition)$table
+confusionMatrix(prediction, testing$Attrition)$overall[1:2] 
+auc <- roc(testing$Attrition, rfProb[, 2])$auc
+auc
+
+
+```
+
+AUC of 0.8315 indicates good discrimination power and better than a Decision Tree. The random forest model randomly selected an optimal of 8 predictors for each split in the decision trees.
+
+In this next part the variable importance can be seen that the model used:
+
+
+```{r}
+rf_imp <- varImp(rfFit, scale = F)
+plot(rf_imp, scales = list(y = list(cex = .95)))
+```
+
+
+Monthly Income, Age and Total Working years seemed to be the most important variable for constructing the Random Forest model while Job Role and Level the least. 
+
+
+```{r}
+partial(rfFit, pred.var = "MonthlyIncome", plot = TRUE, rug = TRUE)
+```
+
+
+In this plot, the realtionshipo between Attrition and Monthly income is plotted and it can be seen that it is not linea. First very important, then it reaches a threshold and not very important.
+
+
+```{r}
+partial(rfFit, pred.var = "TotalWorkingYears", plot = TRUE, rug = TRUE)
+```
+
+
+Very similar for Total Working Years. First very important, then it reaches a threshold and not very important.
+
+
+### Gradient Boosting
+
+
+Gradient boosting is another machine learning method that constructs a sequence of decision trees, where each tree is trained to correct the errors of the previous tree, and the final prediction is made by aggregating the predictions of all the trees.
+
+Initially, I attempted to run the Gradient Boosting model by restricting the sample and variables to the most important ones. However, my computer could only handle 5% of the sample and 7 variables, resulting in a poor AUC. I could have fix this by running the model in the cloud for several days but didn't want to get into that part. Although I know this approach is not ideal, I decided to use the full training dataset for interpretation purposes. Unfortunately, the AUC results were still unsatisfactory. Therefore, I wrote the code without interpreting the results. Generally, the interpretation process for Random Forest is similar.
+
+
+```{r eval=FALSE}
+
+ctrlg <- trainControl(method = "repeatedcv",     
+                     number = 5,               
+                     classProbs = T,             
+                     summaryFunction=twoClassSummary,
+                     verboseIter = F) 
+
+gbmFit <- train(Attrition ~ ., 
+                  data = training,
+                  method = "xgbTree",   
+                  preProc=c('scale','center'),
+                  tuneLength = 30,
+                  metric="ROC",
+                  trControl = ctrl)
+plot(gbmFit)
+```
+
+
+```{r eval=FALSE}
+gbmProb = predict(gbmFit, testing, type="prob")
+prediction <- as.factor(ifelse(gbmProb[,2] > 0.1, "Yes", "No"))
+
+confusionMatrix(prediction, testing$Attrition)$table
+confusionMatrix(prediction, testing$Attrition)$overall[1:2]
+
+```
+
+
+```{r eval=FALSE}
+gbm_imp <- varImp(gbmFit, scale = F)
+plot(gbm_imp, scales = list(y = list(cex = .95)))
+
+```
+
+
+### Best Classification Model and why
+
+After evaluating different models and analyzing their performance, I found that the best predictive model was Regularized Linear Discriminant Analysis (LDA) by a small margin, followed by Logistic Regression and then Random Forest. Although I could not run Gradient Boosting at full power due to computational constraints, it is possible that it could have resulted in even better performance. Also, probably by increasing the number of folds could have gotten a better Random Forest. Nonetheless, the models that were evaluated provide a good indication of the best approaches for predicting employee attrition using the given dataset.
+
+
+
+
+## Advanced Regression
+
+The goal in this next section is to predict Monthly Income and see if someone is receiving more or less than they should.
+
+One such technique is Elastic Net models. Another option is again Random Forest, Gradient Boosting and Neural Networks. By comparing their performance, selecting the best models, and join them through and ensemble I can accurately predict Monthly Income and identify any discrepancies in the current salary structure.
+
+
+### Becnhmark
+
+I first started with a benchmark by predicting all the new Monthly Income values as the average Monthly Income in the training set. However, I can do better than this approach by using advanced regression techniques.
+
+
+```{r}
+benchFit <- lm(MonthlyIncome ~ 1, data=training)
+predictions <- predict(benchFit, newdata=testing)
+RMSE <- sqrt(mean((predictions - testing$MonthlyIncome)^2))
+RMSE
+
+```
+
+
+In this part going to use the RMSE which  measures of the differences between predicted values and actual values. Going to compare different RMSE for different models at the end.
+
+
+### Cross-validation
+
+Cross validation parameters for continuous, five fold because of computational restrictions but 10 will be better. 
+
+
+```{r}
+ctrl <- trainControl(method = "repeatedcv", 
+                     number = 5, 
+                     repeats = 1)
+
+# Create data frame with test results
+test_results <- data.frame(MonthlyIncome = testing$MonthlyIncome)
+```
+
+
+Again, for each model have to define a grid for the hyper-parameters just like before.
+
+
+### Linear Regression
+
+The first model we used for predicting Monthly Income is Linear Regression. However, since this model has a tendency to overfit, need to be careful in interpreting the results.
+
+
+```{r}
+lm_tune <- train(MonthlyIncome~., data = training, 
+                 method = "lm", 
+                 preProc=c('scale', 'center'),
+                 trControl = ctrl)
+lm_tune
+```
+
+Predict
+
+```{r}
+test_results$lm <- predict(lm_tune, testing)
+postResample(pred = test_results$lm,  obs = test_results$MonthlyIncome)
+
+```
+
+
+The first model a normal linear regression and store the predicted values in the test_results. Again, good starting point but probably model suffering of overfitting. 
+
+Not going to use Stepwise regressions because in General Ridge, Lasso and Elastic Net better models so going to use directly those. 
+
+
+### Ridge 
+
+Linear regression model that adds a penalty term to the sum of squared coefficients to prevent overfitting and reduces the value of the betas. 
+
+
+```{r}
+ridge_grid <- expand.grid(lambda = seq(0, .1, length = 100))
+
+ridge_tune <- train(MonthlyIncome~., data = training,
+                    method='ridge',
+                    preProc=c('scale','center'),
+                    tuneGrid = ridge_grid,
+                    trControl=ctrl)
+plot(ridge_tune)
+
+# the best tune
+ridge_tune$bestTune
+```
+
+
+Best hyperparameter lambda is almost 0 and the predictions are the following:
+
+
+```{r}
+# prediction
+test_results$ridge <- predict(ridge_tune, testing)
+
+postResample(pred = test_results$ridge,  obs = test_results$MonthlyIncome)
+
+```
+
+
+The lambda value selected is almost 0, which means that the regularization term has almost no effect on the model. The result suggests that the performance of the Ridge model is almost the same as that of the Linear Regression model, which could be due to the small value of the lambda parameter.
+
+
+### Lasso
+
+Linear regression model that adds a penalty term to the absolute sum of coefficients to encourage sparsity and feature selection
+
+
+```{r}
+lasso_grid <- expand.grid(fraction = seq(.01, 1, length = 100))
+
+lasso_tune <- train(MonthlyIncome~., data = training,
+                    method='lasso',
+                    preProc=c('scale','center'), 
+                    tuneGrid = lasso_grid,
+                    trControl=ctrl)
+plot(lasso_tune)
+
+lasso_tune$bestTune
+test_results$lasso <- predict(lasso_tune, testing)
+postResample(pred = test_results$lasso,  obs = test_results$MonthlyIncome)
+
+```
+
+
+The Lasso model produced an optimal hyperparameter of alpha: 0.78. This resulted in a lower RMSE value, indicating that the Lasso model performed better than the other two models in predicting Monthly Income by removing not relevant variables.
+
+
+### Elastic Net
+
+A linear regression model that combines Ridge and Lasso regularization to balance between avoiding overfitting and feature selection
+
+
+```{r}
+
+elastic_grid = expand.grid(alpha = seq(0, .2, 0.01), lambda = seq(0, .1, 0.01))
+
+glmnet_tune <- train(MonthlyIncome~., data = training,
+                     method='glmnet',
+                     preProc=c('scale','center'),
+                     tuneGrid = elastic_grid,
+                     trControl=ctrl)
+
+plot(glmnet_tune)
+glmnet_tune$bestTune
+
+test_results$glmnet <- predict(glmnet_tune, testing)
+
+postResample(pred = test_results$glmnet,  obs = test_results$MonthlyIncome)
+
+```
+
+
+When alpha is set to 1, the Elastic Net is equivalent to the Lasso. When alpha is set to 0, the Elastic Net is equivalent to the Ridge.
+
+In this case, the optimal alpha value was 0.2 and the optimal lambda value was 0.1. This suggests that the Elastic Net model was more Lasso-like than Ridge-like. The fact that it predicted better than Ridge but worse than Lasso could be due to the fact that it found a good balance between the two regularization techniques, but perhaps did not fully capture the optimal regularization parameters of either model individually. It is also possible that the dataset being used is better suited to one type of regularization over another, in this case Lasso
+
+
+### Machine Learning
+
+In order to reduce our prediction error, we will explore the use of machine learning algorithms. Specifically, we will test five different models: K-nearest neighbors (KNN), Random Forest, Gradient boosting and Neural Networks.
+
+
+### Knn
+
+Same as Classification but for predciting a continuous variable now
+
+
+```{r}
+knn_tune <- train(MonthlyIncome~., 
+                  data = training,
+                  method = "kknn",   
+                  preProc=c('scale','center'),
+                  tuneGrid = data.frame(kmax=c(5,7,9,11,13,15,19,21),distance=2,kernel='optimal'),
+                  trControl = ctrl)
+plot(knn_tune)
+
+test_results$knn <- predict(knn_tune, testing)
+
+postResample(pred = test_results$knn,  obs = test_results$MonthlyIncome)
+```
+
+
+Not a very good model for this dataset. One possible explanation for the worse results of KNN compared to linear regressionand the rest could be the dimensionality. KNN is sensitive to the number of variables in the dataset, and as the number of dimensions increases, the volume of the space increases exponentially, leading to sparsity of data. This can cause the KNN algorithm to have difficulty finding nearest neighbors and may result in overfitting.
+
+
+### Random Forest
+
+Also, same as classification but now for continuous dependent variable
+
+
+```{r}
+rf_tune <- train(MonthlyIncome~., 
+                 data = training,
+                 method = "rf",
+                 preProc=c('scale','center'),
+                 trControl = ctrl,
+                 ntree = 100,
+                 tuneGrid = data.frame(mtry=c(1,3,5,7,9,11,13,15)),
+                 importance = TRUE)
+
+plot(rf_tune)
+```
+
+
+Best randomly selected predictors is around 10 and 15 for the random Forest. 
+
+
+```{r}
+test_results$rf <- predict(rf_tune, testing)
+
+postResample(pred = test_results$rf,  obs = test_results$MonthlyIncome)
+
+```
+
+
+The Random Forest model outperformed all other models in terms of predictive accuracy, as demonstrated by its lower root mean squared error (RMSE) compared to the other models. This indicates that the Random Forest model was able to capture more complex patterns in the data, which allowed it to make more accurate predictions. Additionally, Random Forest can handle a large number of predictors, making it a versatile algorithm for various datasets, including this one-
+
+
+```{r}
+rf_imp_cont <- varImp(rf_tune, scale = F)
+plot(rf_imp_cont, scales = list(y = list(cex = .95)))
+```
+
+
+he Random Forest model shows that the most important variables in predicting Monthly Income are Job Level, Job Role, and Working Years. This result aligns with our understanding of the job market and how these factors typically impact salary. 
+
+
+### Gradient Boosting
+
+For the gradient boosting model, the same thing happened than with classification. I tried to run it with a smaller sample, with less predictors,etc but what my computer could handle it resulted in not a very good model so instead just write the code using the full sample and how I would have done it. 
+
+
+```{r eval=FALSE}
+ctrlgc <- trainControl(method = "repeatedcv", 
+                     number = 5, 
+                     repeats = 1)
+
+xgb_tune <- train(MonthlyIncome ~ ., 
+                  data = training,
+                  method = "xgbTree",
+                  preProc=c('scale','center'),
+                  objective="reg:squarederror",
+                  trControl = ctrlgc,
+                  tuneGrid = expand.grid(nrounds = c(500,1000), 
+                                         max_depth = c(5,6,7), 
+                                         eta = c(0.01, 0.1, 1),
+                                         gamma = c(1, 2, 3), 
+                                         colsample_bytree = c(1, 2),
+                                         min_child_weight = c(1), subsample = c(0.2,0.5,0.8)))
+
+test_results$xgb <- predict(xgb_tune, testing)
+
+postResample(pred = test_results$xgb,  obs = test_results$MonthlyIncome)
+
+plot(varImp(xgb_tune, scale = F), scales = list(y = list(cex = .95)))
+
+```
+
+
+### Neural Networks
+
+A neural network is a type of machine learning model that consists of multiple layers of interconnected nodes that perform computations on the input data to produce an output.
+
+In R, have to convert categorical variables into dummies so that they can run in the model. Again, due to computational constraints could run it but probably be better than Random Forest and around Gradient Boosting predictive power.
+
+
+```{r eval=FALSE}
+
+nn_tune <- train( MonthlyIncome ~ .,
+                 data = training,
+                 method = "neuralnet",
+                 preProc=c('scale','center'),
+                 trControl = ctrlgc,
+                 tuneGrid = expand.grid(layer1 = c(4, 2),
+                                        layer2 = c(2, 1, 0),
+                                        layer3 = c(0)))
+
+
+
+test_results$nn <- predict(nn_tune, testing)
+
+postResample(pred = test_results$nn,  obs = test_results$MonthlyIncome)
+
+plot(varImp(nn_tune, scale = F), scales = list(y = list(cex = .95)))
+
+
+```
+
+
+## Ensemble
+
+To further improve our predictive accuracy, I used an ensemble method to combine the predictions from the top-performing models. Specifically, I will select the top 3 of models based on their performance on the validation set, and average their predictions on the test set to obtain the final ensemble prediction.
+
+First, I will compare the mean absolute error (MAE) of each individual model trained: 
+
+
+```{r}
+apply(test_results[-1], 2, function(x) mean(abs(x - test_results$MonthlyIncome)))
+
+```
+
+
+The ones with the lowest MAE are in order: Random Fores, Lasso regression and elastic net. Probably gradient boosting and neural networks will be up there and would have used them.
+
+Combine them and get the average of top 3:
+
+
+```{r}
+
+test_results$comb = (test_results$rf + test_results$lasso + test_results$glmnet)/3
+
+postResample(pred = test_results$comb,  obs = test_results$MonthlyIncome)
+
+```
+
+
+The MAE is lower than the best performing model (Random Forest) so an improvement compared to only using 1 model.
+
+Results of predicted Monthly Income:
+
+
+```{r}
+yhat = test_results$comb
+
+hist(yhat, col="lightblue")
+```
+
+
+Model is predicting a lot individuals with lower wages and it is doing a good job based on the other variables. It can be seen that it is an asymmetric distribution.
+
+
+## Confidence Intervals
+
+Finally, the aim is to obtain confidence intervals for the ensemble. To achieve this, a new division is added to the cross-validation process: the test set is divided into two parts, namely "test" and "calibration". The "calibration" set is used to make predictions on Monthly Incomes and compute the errors. These errors are then used to create a histogram, which provides the size of the prediction interval
+
+
+```{r}
+y = test_results$MonthlyIncome
+error = y-yhat
+hist(error, col="lightblue")
+```
+
+
+Distribution n of errors from the model vs the real values. It can be seen that it represents a normal distribution. 
+
+So now going to build 90% confidence Intervals and plot it: 
+
+
+```{r}
+noise = error[1:80]
+lwr = yhat[81:length(yhat)] + quantile(noise,0.05, na.rm=T)
+upr = yhat[81:length(yhat)] + quantile(noise,0.95, na.rm=T)
+predictions = data.frame(real=y[81:length(y)], fit=yhat[81:length(yhat)], lwr=lwr, upr=upr)
+predictions = predictions %>% mutate(out=factor(if_else(real<lwr | real>upr,1,0)))
+
+ggplot(predictions, aes(x=fit, y=real))+
+  geom_point(aes(color=out)) + theme(legend.position="none") +
+  geom_ribbon(data=predictions,aes(ymin=lwr,ymax=upr),alpha=0.3) +
+  labs(title = "Prediction intervals", x = "Prediction",y="Real Monthly Income")
+
+```
+
+
+The red points falling within the prediction interval indicate that these individuals are being compensated appropriately based on the characteristics described in the dataset. On the other hand, the blue points lying outside the interval suggest that some individuals are being overpaid (on top) or underpaid (below) compared to their peers. It might be worthwhile for the company to investigate these cases and consider adjusting the salaries or factoring them into future salary decisions.
+
+
+## Conclusion
+
+In conclusion, this analysis covered three main areas: feature engineering, attrition prediction, and monthly income prediction. In the data cleaning phase, I identified and addressed inconsistencies and did some basic descriptive statistics. In the attrition modeling phase, I developed and compared various models to interpret and predict employee attrition, identifying the most significant factors contributing to it and selecting best models using the AUC. In the monthly income modeling phase, I used similar techniques like utilizing machine learning algorithms to predict employee monthly income and identified the most important variables for accurate predictions. I did an ensemble with the performing models and built a plot with the confidence interval. 
+
+This analysis provided several insights that can be used to guide a company decisions. For example, the most critical factors contributing to employee attrition were job satisfaction, years at the company, and monthly income. Additionally, the most important variables in predicting monthly income were job level, job role, and working years. The findings suggest that utilizing machine learning algorithms can significantly improve the accuracy of employee attrition and monthly income predictions. Even though I couldn't use Gradient Boosting and Neural Networks.
+
+
